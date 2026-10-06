@@ -24,8 +24,9 @@ function Client({cfg}){
  async function pagar(m){const id=crypto.randomUUID(),tel=f.zap.replace(/\D/g,'')
   await supabase.from('orders').insert({id,nome:f.nome,tel,endereco:f.end,itens:on,subtotal:c.s,taxa:c.taxa,total:c.t,forma:m})
   localStorage.setItem('mc_oid',id);setOid(id)
-  const r=await fetch('/api/pay',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({orderId:id,method:m,amount:c.t,name:f.nome,phone:tel,installments:cfg.installments})}).then(r=>r.json()).catch(()=>({}))
-  if(r.type=='pix'||r.type=='manual')setPay(r);else if(r.url)location.href=r.url;else setMsg('Não deu certo. Tente outro jeito de pagar.')}
+  const r=await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pay`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+import.meta.env.VITE_SUPABASE_ANON_KEY},body:JSON.stringify({orderId:id,method:m,amount:c.t,name:f.nome,phone:tel,installments:cfg.installments})}).then(r=>r.json()).catch(()=>({}))
+  if(r.error){setMsg('Não deu certo: '+r.error+'. Tente outro jeito de pagar.')}
+  else if(r.type=='pix'||r.type=='manual')setPay(r);else if(r.url)location.href=r.url;else setMsg('Não deu certo. Tente outro jeito de pagar.')}
  if(t=='home')return<><h1>Oi, vizinha! 👋</h1><p>Mande sua lista. Entregamos em até {cfg.eta} minutos.</p>
   <button className="btn" onClick={ouvir}>{rec?'Estou ouvindo...':'🎤 Mandar lista por áudio'}</button>
   <div className="card"><textarea placeholder="Escreva o que está faltando: arroz, leite..." value={f.texto} onChange={up('texto')}/>
@@ -47,14 +48,15 @@ function Client({cfg}){
   <button className="btn o" onClick={()=>{localStorage.removeItem('mc_oid');setOid(null);setPay(null);setT('home')}}>Fazer outro pedido</button></>}
 
 function Admin({cfg,setCfg}){
- const[ok,setOk]=useState(false),[l,setL]=useState([]),[e,setE]=useState(''),[p,setP]=useState(''),[tab,setTab]=useState('p'),[cp,setCp]=useState(null),[cf,setCf]=useState(cfg)
+ const[ok,setOk]=useState(false),[l,setL]=useState([]),[e,setE]=useState(''),[p,setP]=useState(''),[tab,setTab]=useState('p'),[cp,setCp]=useState(null),[cf,setCf]=useState(cfg),[aMsg,setAMsg]=useState('')
  useEffect(()=>{supabase.auth.getSession().then(r=>setOk(!!r.data.session))},[])
  useEffect(()=>{setCf(cfg)},[cfg])
  const load=()=>supabase.from('orders').select('*').order('created_at',{ascending:false}).then(r=>setL(r.data||[]))
  useEffect(()=>{if(!ok)return;load();const h=setInterval(load,8000);return()=>clearInterval(h)},[ok])
  const upd=(id,d)=>supabase.from('orders').update(d).eq('id',id).then(load)
  if(!ok)return<div className="card"><h2>Entrar (só o Wagner)</h2><input placeholder="Email" value={e} onChange={x=>setE(x.target.value)}/><input type="password" placeholder="Senha" value={p} onChange={x=>setP(x.target.value)}/>
-  <button className="btn t" onClick={async()=>{const r=await supabase.auth.signInWithPassword({email:e,password:p});setOk(!r.error)}}>Entrar</button></div>
+  <button className="btn t" onClick={async()=>{const r=await supabase.auth.signInWithPassword({email:e,password:p});if(r.error)setAMsg(r.error.message);else setAMsg('')}}>Entrar</button>
+  {aMsg&&<p className="err">{aMsg}</p>}</div>
  const lista=()=>{const m={};l.filter(o=>o.status<2).forEach(o=>o.itens.forEach(i=>m[i.n]=(m[i.n]||0)+i.q));setCp(Object.entries(m).map(([n,q])=>`[ ] ${q} ${n}`).join('\n')||'Nada para comprar agora.')}
  const N=k=>x=>setCf({...cf,[k]:x.target.value===''?'':isNaN(x.target.value)?x.target.value:Number(x.target.value)})
  if(tab=='s')return<><button className="btn o sm" onClick={()=>setTab('p')}>← Pedidos</button><div className="card" style={{maxWidth:520}}><h2>Configurações</h2>
