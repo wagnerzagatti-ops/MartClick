@@ -23,11 +23,20 @@ Deno.serve(async (req: Request) => {
 
     const prov = Deno.env.get("PAY_PROVIDER") || "mercadopago";
     const site = Deno.env.get("SITE_URL") || "";
+    const manualPixKey = Deno.env.get("MANUAL_PIX_KEY") || "";
 
-    // Manual / PIX key mode — no payment processor
+    // PIX with manual key — no payment processor, just show the key
+    if (method === "pix" && manualPixKey) {
+      return new Response(
+        JSON.stringify({ type: "manual", text: manualPixKey }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Full manual mode — no payment processor at all
     if (prov === "manual") {
       return new Response(
-        JSON.stringify({ type: "manual", text: Deno.env.get("MANUAL_PIX_KEY") || "" }),
+        JSON.stringify({ type: "manual", text: manualPixKey }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -39,6 +48,7 @@ Deno.serve(async (req: Request) => {
         Authorization: "Bearer " + mpToken,
       };
 
+      // PIX via Mercado Pago (only if no manual key was set above)
       if (method === "pix") {
         const resp = await fetch("https://api.mercadopago.com/v1/payments", {
           method: "POST",
